@@ -18,7 +18,7 @@ AVStream *o_video_stream;
 bool bStop = false;
 int frame_nums = 0;
 
-int ReadingThrd(std::string in, std::string out)
+int Record(std::string in, std::string out)
 {
     avcodec_register_all();
     av_register_all();
@@ -26,7 +26,6 @@ int ReadingThrd(std::string in, std::string out)
 
     /* should set to NULL so that avformat_open_input() allocate a new one */
     i_fmt_ctx = NULL;
-    //This is the RTSP streaming address of the camera I got using ONVIF protocol
 
     if (avformat_open_input(&i_fmt_ctx, in.c_str(), NULL, NULL) != 0)
     {
@@ -39,8 +38,6 @@ int ReadingThrd(std::string in, std::string out)
         fprintf(stderr, " = could not find stream info\n");
         return -1;
     }
-
-    //av_dump_format(i_fmt_ctx, 0, argv[1], 0);
 
     /* find first video stream */
     for (unsigned i = 0; i < i_fmt_ctx->nb_streams; i++)
@@ -60,36 +57,11 @@ int ReadingThrd(std::string in, std::string out)
     avformat_alloc_output_context2(&o_fmt_ctx, NULL, NULL, out.c_str());
 
     /*
-        * since all input files are supposed to be identical (framerate, dimension, color format, ...)
-        * we can safely set output codec values from first input file
-        */
+    * since all input files are supposed to be identical (framerate, dimension, color format, ...)
+    * we can safely set output codec values from first input file
+    */
     o_video_stream = avformat_new_stream(o_fmt_ctx, NULL);
-    {
-        AVCodecContext *c;
-        c = o_video_stream->codec;
-        c->bit_rate = 400000;
-        c->codec_id = i_video_stream->codec->codec_id;
-        c->codec_type = i_video_stream->codec->codec_type;
-        c->time_base.num = i_video_stream->time_base.num;
-        c->time_base.den = i_video_stream->time_base.den;
-        fprintf(stderr, " = time_base.num = %d time_base.den = %d\n", c->time_base.num, c->time_base.den);
-        c->width = i_video_stream->codec->width;
-        c->height = i_video_stream->codec->height;
-        c->pix_fmt = i_video_stream->codec->pix_fmt;
-        printf(" = width: %d height: %d pix_fmt: %d\n", c->width, c->height, c->pix_fmt);
-        c->flags = i_video_stream->codec->flags;
-        c->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-        c->me_range = i_video_stream->codec->me_range;
-        c->max_qdiff = i_video_stream->codec->max_qdiff;
-
-        c->qmin = i_video_stream->codec->qmin;
-        c->qmax = i_video_stream->codec->qmax;
-
-        c->qcompress = i_video_stream->codec->qcompress;
-    }
-
     avio_open(&o_fmt_ctx->pb, out.c_str(), AVIO_FLAG_WRITE);
-
     avformat_write_header(o_fmt_ctx, NULL);
 
     int last_pts = 0;
@@ -120,11 +92,6 @@ int ReadingThrd(std::string in, std::string out)
         static int num = 1;
         printf(" = frame %d\n", num++);
         av_interleaved_write_frame(o_fmt_ctx, &i_pkt);
-        //av_free_packet(&i_pkt);
-        //av_init_packet(&i_pkt);
-        //Sleep(10);
-        //sleep(1);
-        //usleep() under linux can accept milliseconds, and include the header file #include <unistd.h>
         if (frame_nums > 2000)
         {
             bStop = true;
@@ -152,7 +119,7 @@ int ReadingThrd(std::string in, std::string out)
 
 int main()
 {
-    ReadingThrd("rtsp://admin:hk123456@192.168.104.72:554/Streaming/Channels/101",
+    Record("rtsp://admin:hk123456@192.168.104.72:554/Streaming/Channels/101",
                 "111.mp4");
     return 0;
 }
