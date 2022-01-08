@@ -20,8 +20,8 @@ int frame_nums = 0;
 
 int Record(std::string in, std::string out)
 {
-    avcodec_register_all();
-    av_register_all();
+    // avcodec_register_all();
+    // av_register_all();
     avformat_network_init();
 
     /* should set to NULL so that avformat_open_input() allocate a new one */
@@ -42,7 +42,7 @@ int Record(std::string in, std::string out)
     /* find first video stream */
     for (unsigned i = 0; i < i_fmt_ctx->nb_streams; i++)
     {
-        if (i_fmt_ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
+        if (i_fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
         {
             i_video_stream = i_fmt_ctx->streams[i];
             break;
@@ -56,42 +56,27 @@ int Record(std::string in, std::string out)
 
     avformat_alloc_output_context2(&o_fmt_ctx, NULL, NULL, out.c_str());
 
-    /*
-    * since all input files are supposed to be identical (framerate, dimension, color format, ...)
-    * we can safely set output codec values from first input file
-    */
     o_video_stream = avformat_new_stream(o_fmt_ctx, NULL);
     avio_open(&o_fmt_ctx->pb, out.c_str(), AVIO_FLAG_WRITE);
     avformat_write_header(o_fmt_ctx, NULL);
 
-    int last_pts = 0;
-    int last_dts = 0;
-
-    int64_t pts, dts;
     while (!bStop)
     {
-        //printf("------------------------------------------------------\n");
-        AVPacket i_pkt;
-        av_init_packet(&i_pkt);
-        i_pkt.size = 0;
-        i_pkt.data = NULL;
-        if (av_read_frame(i_fmt_ctx, &i_pkt) < 0)
+        AVPacket *i_pkt = av_packet_alloc();
+        i_pkt->size = 0;
+        i_pkt->data = NULL;
+        if (av_read_frame(i_fmt_ctx, i_pkt) < 0)
             break;
         /*
          * pts and dts should increase monotonically
          * pts should be >= dts
          */
-        i_pkt.flags |= AV_PKT_FLAG_KEY;
-        pts = i_pkt.pts;
-        i_pkt.pts += last_pts;
-        dts = i_pkt.dts;
-        i_pkt.dts += last_dts;
-        i_pkt.stream_index = 0;
+        i_pkt->flags |= AV_PKT_FLAG_KEY;
+        i_pkt->stream_index = 0;
 
-        //printf("%lld %lld\n", i_pkt.pts, i_pkt.dts);
         static int num = 1;
         printf(" = frame %d\n", num++);
-        av_interleaved_write_frame(o_fmt_ctx, &i_pkt);
+        av_interleaved_write_frame(o_fmt_ctx, i_pkt);
         if (frame_nums > 2000)
         {
             bStop = true;
@@ -99,10 +84,8 @@ int Record(std::string in, std::string out)
         frame_nums++;
         using namespace std::chrono_literals;
         std::this_thread::sleep_for(20ms);
+        av_packet_free(&i_pkt);
     }
-
-    last_dts += dts;
-    last_pts += pts;
 
     avformat_close_input(&i_fmt_ctx);
 
@@ -120,6 +103,6 @@ int Record(std::string in, std::string out)
 int main()
 {
     Record("rtsp://admin:hk123456@192.168.104.72:554/Streaming/Channels/101",
-                "111.mp4");
+           "111.mp4");
     return 0;
 }
